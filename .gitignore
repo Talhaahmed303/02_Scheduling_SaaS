@@ -1,0 +1,27 @@
+# Python / Django
+__pycache__/
+*.py[cod]
+*$py.class
+*.sqlite3
+venv/
+backend/venv/
+env/
+.venv/
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+.npm-cache/
+
+# Environment Variables & Logs
+.env
+backend/.env
+*.log
+
+# OS / IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

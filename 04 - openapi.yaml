@@ -1,0 +1,997 @@
+openapi: 3.0.3
+info:
+  title: FalconXoft Appointment & Scheduling SaaS API
+  version: 1.0.0
+  description: Enterprise-grade Appointment Scheduling API featuring dynamic slot
+    generation, pessimistic concurrency control (double-booking prevention), timezone
+    conversion, and multi-channel reminder auditing.
+paths:
+  /api/appointments/:
+    get:
+      operationId: api_appointments_list
+      description: Lists appointments filtered by customer email, provider ID, or
+        status.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAppointmentList'
+          description: ''
+  /api/appointments/{id}/:
+    get:
+      operationId: api_appointments_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+          description: ''
+  /api/appointments/{id}/cancel/:
+    post:
+      operationId: api_appointments_cancel_create
+      description: |-
+        Cancels an existing appointment and dispatches cancellation alerts.
+        Validates advance notice policy.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentCancelRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AppointmentCancelRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AppointmentCancelRequest'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+          description: ''
+  /api/appointments/{id}/reschedule/:
+    post:
+      operationId: api_appointments_reschedule_create
+      description: |-
+        Reschedules an existing appointment to a new slot.
+        Enforces minimum cancellation/reschedule notice policy and atomic concurrency check.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentRescheduleRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AppointmentRescheduleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AppointmentRescheduleRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+          description: ''
+  /api/appointments/book/:
+    post:
+      operationId: api_appointments_book_create
+      description: |-
+        Atomic Booking Endpoint with Pessimistic Concurrency Defense.
+        Locks the provider row during slot validation to guarantee double bookings
+        cannot occur even under high concurrency race conditions.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AppointmentCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AppointmentCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/dashboard/metrics/:
+    get:
+      operationId: api_dashboard_metrics_retrieve
+      description: Returns high-level business and operational scheduling metrics.
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardMetricsResponse'
+          description: ''
+  /api/providers/:
+    get:
+      operationId: api_providers_list
+      description: Lists all active providers with services and working hours.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProviderProfileList'
+          description: ''
+  /api/providers/{id}/:
+    get:
+      operationId: api_providers_retrieve
+      description: Retrieves full details for a single provider.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderProfile'
+          description: ''
+  /api/providers/{provider_id}/slots/:
+    get:
+      operationId: api_providers_slots_retrieve
+      description: |-
+        Computes available booking slots for a provider and service on a specific calendar date.
+        Performs full time zone projection into the client's local zone.
+      parameters:
+      - in: query
+        name: client_tz
+        schema:
+          type: string
+        description: Client IANA timezone e.g. America/Los_Angeles, UTC
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+        description: YYYY-MM-DD format
+        required: true
+      - in: path
+        name: provider_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: service_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotAvailabilityResponse'
+          description: ''
+  /api/reminders/:
+    get:
+      operationId: api_reminders_list
+      description: Lists audit log entries for all mock dispatched reminders.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReminderLogList'
+          description: ''
+  /api/services/:
+    get:
+      operationId: api_services_list
+      description: Lists all services, optionally filtered by provider_id.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedServiceList'
+          description: ''
+  /api/services/{id}/:
+    get:
+      operationId: api_services_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ''
+components:
+  schemas:
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        provider:
+          type: string
+          format: uuid
+        provider_name:
+          type: string
+          readOnly: true
+        service:
+          type: string
+          format: uuid
+        service_name:
+          type: string
+          readOnly: true
+        duration_minutes:
+          type: integer
+          readOnly: true
+        customer_name:
+          type: string
+          maxLength: 150
+        customer_email:
+          type: string
+          format: email
+          maxLength: 254
+        customer_phone:
+          type: string
+          maxLength: 30
+        customer_notes:
+          type: string
+        customer_timezone:
+          type: string
+          maxLength: 50
+        start_time:
+          type: string
+          format: date-time
+          description: Canonical UTC start timestamp
+        end_time:
+          type: string
+          format: date-time
+          description: Canonical UTC end timestamp
+        status:
+          $ref: '#/components/schemas/AppointmentStatusEnum'
+        cancellation_reason:
+          type: string
+        meeting_link:
+          type: string
+          maxLength: 255
+        version:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Optimistic concurrency locking version
+        reminders:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReminderLog'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - customer_email
+      - customer_name
+      - duration_minutes
+      - end_time
+      - id
+      - provider
+      - provider_name
+      - reminders
+      - service
+      - service_name
+      - start_time
+      - updated_at
+    AppointmentCancelRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+    AppointmentCreateRequest:
+      type: object
+      properties:
+        provider_id:
+          type: string
+          format: uuid
+        service_id:
+          type: string
+          format: uuid
+        start_time:
+          type: string
+          format: date-time
+        customer_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        customer_email:
+          type: string
+          format: email
+          minLength: 1
+        customer_phone:
+          type: string
+          maxLength: 30
+        customer_notes:
+          type: string
+        customer_timezone:
+          type: string
+          minLength: 1
+          default: UTC
+          maxLength: 50
+      required:
+      - customer_email
+      - customer_name
+      - provider_id
+      - service_id
+      - start_time
+    AppointmentRescheduleRequest:
+      type: object
+      properties:
+        new_start_time:
+          type: string
+          format: date-time
+        customer_timezone:
+          type: string
+          minLength: 1
+          default: UTC
+          maxLength: 50
+      required:
+      - new_start_time
+    AppointmentStatusEnum:
+      enum:
+      - PENDING
+      - CONFIRMED
+      - CANCELLED
+      - COMPLETED
+      - RESCHEDULED
+      type: string
+      description: |-
+        * `PENDING` - Pending Confirmation
+        * `CONFIRMED` - Confirmed
+        * `CANCELLED` - Cancelled
+        * `COMPLETED` - Completed
+        * `RESCHEDULED` - Rescheduled
+    ChannelEnum:
+      enum:
+      - EMAIL
+      - SMS
+      - CALENDAR_INVITE
+      type: string
+      description: |-
+        * `EMAIL` - Email Notification
+        * `SMS` - SMS Text Alert
+        * `CALENDAR_INVITE` - Calendar ICS Dispatch
+    DashboardMetricsResponse:
+      type: object
+      properties:
+        total_appointments:
+          type: integer
+        confirmed_appointments:
+          type: integer
+        upcoming_appointments:
+          type: integer
+        cancelled_appointments:
+          type: integer
+        completed_appointments:
+          type: integer
+        gross_revenue:
+          type: number
+          format: double
+        currency:
+          type: string
+        active_providers:
+          type: integer
+        active_services:
+          type: integer
+        reminders_dispatched:
+          type: integer
+        generated_at:
+          type: string
+          format: date-time
+      required:
+      - active_providers
+      - active_services
+      - cancelled_appointments
+      - completed_appointments
+      - confirmed_appointments
+      - currency
+      - generated_at
+      - gross_revenue
+      - reminders_dispatched
+      - total_appointments
+      - upcoming_appointments
+    DayOfWeekEnum:
+      enum:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      type: integer
+      description: |-
+        * `0` - Monday
+        * `1` - Tuesday
+        * `2` - Wednesday
+        * `3` - Thursday
+        * `4` - Friday
+        * `5` - Saturday
+        * `6` - Sunday
+    PaginatedAppointmentList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Appointment'
+    PaginatedProviderProfileList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderProfile'
+    PaginatedReminderLogList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReminderLog'
+    PaginatedServiceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+    ProviderProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 150
+        slug:
+          type: string
+          maxLength: 150
+          pattern: ^[-a-zA-Z0-9_]+$
+        title:
+          type: string
+          description: Professional designation e.g. Principal Cloud Architect
+          maxLength: 200
+        bio:
+          type: string
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        phone:
+          type: string
+          maxLength: 30
+        timezone:
+          type: string
+          description: Standard IANA Timezone e.g. America/New_York, UTC, Asia/Karachi
+          maxLength: 50
+        avatar_url:
+          type: string
+          format: uri
+          maxLength: 200
+        is_active:
+          type: boolean
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+          readOnly: true
+        working_hours:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkingHour'
+          readOnly: true
+        overrides:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduleOverride'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - email
+      - id
+      - name
+      - overrides
+      - services
+      - slug
+      - title
+      - updated_at
+      - working_hours
+    ReminderLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        appointment:
+          type: string
+          format: uuid
+        channel:
+          $ref: '#/components/schemas/ChannelEnum'
+        scheduled_for:
+          type: string
+          format: date-time
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ReminderLogStatusEnum'
+        recipient:
+          type: string
+          maxLength: 150
+        subject:
+          type: string
+          maxLength: 255
+        payload_preview: {}
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - appointment
+      - created_at
+      - id
+      - recipient
+      - scheduled_for
+      - subject
+    ReminderLogStatusEnum:
+      enum:
+      - QUEUED
+      - DISPATCHED
+      - FAILED
+      type: string
+      description: |-
+        * `QUEUED` - Queued in Dispatch Buffer
+        * `DISPATCHED` - Dispatched Successfully
+        * `FAILED` - Dispatch Failed
+    ScheduleOverride:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        provider:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+          description: Specific calendar date for override
+        is_unavailable:
+          type: boolean
+          description: True if entirely unavailable (holiday/sick)
+        custom_start_time:
+          type: string
+          format: time
+          nullable: true
+        custom_end_time:
+          type: string
+          format: time
+          nullable: true
+        reason:
+          type: string
+          maxLength: 200
+      required:
+      - date
+      - id
+      - provider
+    Service:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        provider:
+          type: string
+          format: uuid
+        provider_name:
+          type: string
+          readOnly: true
+        provider_timezone:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+        slug:
+          type: string
+          maxLength: 200
+          pattern: ^[-a-zA-Z0-9_]+$
+        description:
+          type: string
+        duration_minutes:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Duration of session in minutes
+        buffer_minutes:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Cool-down buffer required after session
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        currency:
+          type: string
+          maxLength: 10
+        cancellation_notice_hours:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Minimum advance notice required to reschedule or cancel without
+            penalty
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+      - provider
+      - provider_name
+      - provider_timezone
+      - slug
+      - updated_at
+    SlotAvailabilityResponse:
+      type: object
+      properties:
+        provider_id:
+          type: string
+          format: uuid
+        service_id:
+          type: string
+          format: uuid
+        date:
+          type: string
+        client_timezone:
+          type: string
+        slot_count:
+          type: integer
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlotItem'
+      required:
+      - client_timezone
+      - date
+      - provider_id
+      - service_id
+      - slot_count
+      - slots
+    SlotItem:
+      type: object
+      properties:
+        start_time_utc:
+          type: string
+        end_time_utc:
+          type: string
+        start_time_provider:
+          type: string
+        end_time_provider:
+          type: string
+        start_time_client:
+          type: string
+        end_time_client:
+          type: string
+        display_time:
+          type: string
+        display_label:
+          type: string
+        client_display_label:
+          type: string
+        duration_minutes:
+          type: integer
+        buffer_minutes:
+          type: integer
+      required:
+      - buffer_minutes
+      - client_display_label
+      - display_label
+      - display_time
+      - duration_minutes
+      - end_time_client
+      - end_time_provider
+      - end_time_utc
+      - start_time_client
+      - start_time_provider
+      - start_time_utc
+    WorkingHour:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        provider:
+          type: string
+          format: uuid
+        day_of_week:
+          allOf:
+          - $ref: '#/components/schemas/DayOfWeekEnum'
+          minimum: -2147483648
+          maximum: 2147483647
+        day_name:
+          type: string
+          readOnly: true
+        start_time:
+          type: string
+          format: time
+          description: Start of business hours in provider timezone
+        end_time:
+          type: string
+          format: time
+          description: End of business hours in provider timezone
+        break_start_time:
+          type: string
+          format: time
+          nullable: true
+          description: Daily break start (optional)
+        break_end_time:
+          type: string
+          format: time
+          nullable: true
+          description: Daily break end (optional)
+        is_available:
+          type: boolean
+          description: False if day is off (e.g. weekend)
+      required:
+      - day_name
+      - day_of_week
+      - id
+      - provider
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
